@@ -13,12 +13,44 @@
 		"Other"
 	],
 	"activationEvents": [],
+	"extensionKind": [
+		"workspace"
+	],
 	"main": "./dist/extension.js",
 	"contributes": {
 		"commands": [
 			{
-				"command": "remotetrash.helloWorld",
-				"title": "Hello World"
+				"command": "remotetrash.delete",
+				"title": "Delete"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "remotetrash.delete",
+					"when": "false"
+				}
+			],
+			"explorer/context": [
+				{
+					"command": "remotetrash.delete",
+					"when": "remoteName && !explorerResourceIsRoot && !explorerResourceMoveableToTrash",
+					"group": "7_modification@17"
+				}
+			]
+		},
+		"keybindings": [
+			{
+				"command": "-deleteFile",
+				"key": "delete",
+				"mac": "cmd+backspace",
+				"when": "filesExplorerFocus && foldersViewVisible && !explorerResourceMoveableToTrash && !inputFocus"
+			},
+			{
+				"command": "remotetrash.delete",
+				"key": "delete",
+				"mac": "cmd+backspace",
+				"when": "remoteName && filesExplorerFocus && foldersViewVisible && !explorerResourceMoveableToTrash && !inputFocus"
 			}
 		]
 	},
