@@ -1,13 +1,23 @@
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+# This workflow is triggered when a new version tag (`vX.Y.Z`) is push on branch `main`;
+# this relies on lightweight tags (see below, and see the `postversion` script in `package.json`).
 
 name: Publish extension
 
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+concurrency:
+  group: "publish-extension"
+  cancel-in-progress: true
+
 jobs:
   publish-extension:
+    # Note: `github.event.base_ref` is equal to `refs/heads/main` when the workflow is triggered
+    # by a branch, or a lightweight tag (_not_ an annotated tag), placed on the last commit of the `main` branch
+    if: github.event.base_ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

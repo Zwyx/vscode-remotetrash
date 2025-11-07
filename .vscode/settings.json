@@ -21,5 +21,15 @@
 	},
 	// Turn off tsc task auto detection since we have the necessary tasks as npm scripts
 	"typescript.tsc.autoDetect": "off",
-	"cSpell.words": ["nvmrc", "openvsx", "OVSX", "remotetrash", "zwyx"]
+	"cSpell.words": [
+		"Keybinding",
+		"nvmrc",
+		"openvsx",
+		"OVSX",
+		"postversion",
+		"remotetrash",
+		"Unfortortunately",
+		"webp",
+		"zwyx"
+	]
 }

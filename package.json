@@ -1,7 +1,7 @@
 {
 	"name": "remotetrash",
 	"displayName": "Remote Trash",
-	"icon": "res/Zwyx-220x220-rounded.png",
+	"icon": "res/Zwyx-220x220-rounded.webp",
 	"description": "Move files to trash in dev containers.",
 	"version": "0.0.1",
 	"publisher": "zwyx",
@@ -78,6 +78,7 @@
 		"test": "vscode-test",
 		"lint": "eslint src --report-unused-disable-directives --max-warnings 0",
 		"prettier": "prettier -w .",
+		"postversion": "res/convert-annotated-tag-to-lightweight.sh",
 		"package": "vsce package",
 		"vscode:publish": "vsce publish",
 		"openvsx:publish": "ovsx publish"
