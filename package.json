@@ -3,7 +3,7 @@
 	"displayName": "Remote Trash",
 	"icon": "res/Zwyx-220x220-rounded.webp",
 	"description": "Move files to trash in dev containers.",
-	"version": "0.0.1",
+	"version": "1.0.0",
 	"publisher": "zwyx",
 	"repository": "github:zwyx/vscode-remotetrash",
 	"engines": {
