@@ -1,26 +1,41 @@
 import { exec } from "child_process";
-import * as os from "os";
-import * as path from "path";
 import { promisify } from "util";
 import * as vscode from "vscode";
 
 const execAsync = promisify(exec);
 
-async function checkTrashInstalled(): Promise<boolean> {
+function getTrashCliPath(): string {
+	const config = vscode.workspace.getConfiguration("remotetrash");
+	return config.get("trashCliPath") ?? "trash";
+}
+
+async function checkTrashInstalled(trashCliPath: string): Promise<boolean> {
 	try {
-		const { stdout, stderr } = await execAsync("which trash");
-		console.log("which trash - stdout:", stdout);
-		console.log("which trash - stderr:", stderr);
+		await execAsync(`which ${trashCliPath}`);
 		return true;
-	} catch (error) {
-		console.log("which trash - error:", error);
+	} catch {
+		const response = await vscode.window.showWarningMessage(
+			`'${trashCliPath}' not found. The Remote Trash extension requires a trash CLI tool. See installation instructions.`,
+			"Open Installation Instructions",
+		);
+
+		if (response === "Open Installation Instructions") {
+			await vscode.commands.executeCommand(
+				"extension.open",
+				"zwyx.remotetrash",
+			);
+		}
+
 		return false;
 	}
 }
 
-async function deleteWithTrash(uri: vscode.Uri): Promise<void> {
+async function sendToTrash(
+	uri: vscode.Uri,
+	trashCliPath: string,
+): Promise<void> {
 	try {
-		await execAsync(`trash "${uri.fsPath}"`);
+		await execAsync(`${trashCliPath} "${uri.fsPath}"`);
 	} catch (error) {
 		throw new Error(
 			`Failed to delete: ${
@@ -30,218 +45,99 @@ async function deleteWithTrash(uri: vscode.Uri): Promise<void> {
 	}
 }
 
-// WorkspaceEdit-based approach (undoable, no dependency)
-interface TrashPaths {
-	filesDir: vscode.Uri;
-	infoDir: vscode.Uri;
-}
-
-function getTrashPaths(): TrashPaths {
-	const homeDir = os.homedir();
-	const trashBase = path.join(homeDir, ".local", "share", "Trash");
-
-	return {
-		filesDir: vscode.Uri.file(path.join(trashBase, "files")),
-		infoDir: vscode.Uri.file(path.join(trashBase, "info")),
-	};
-}
-
-async function ensureTrashDirectories(): Promise<void> {
-	const { filesDir, infoDir } = getTrashPaths();
-
-	try {
-		await vscode.workspace.fs.stat(filesDir);
-	} catch {
-		await vscode.workspace.fs.createDirectory(filesDir);
-	}
-
-	try {
-		await vscode.workspace.fs.stat(infoDir);
-	} catch {
-		await vscode.workspace.fs.createDirectory(infoDir);
-	}
-}
-
-function getUniqueTrashName(
-	baseName: string,
-	existingNames: Set<string>,
-): string {
-	if (!existingNames.has(baseName)) {
-		return baseName;
-	}
-
-	const ext = path.extname(baseName);
-	const nameWithoutExt = path.basename(baseName, ext);
-
-	let counter = 2;
-	while (true) {
-		const newName = `${nameWithoutExt}.${counter}${ext}`;
-		if (!existingNames.has(newName)) {
-			return newName;
-		}
-		counter++;
-	}
-}
-
-async function deleteWithWorkspaceEdit(
-	uri: vscode.Uri,
-	edit: vscode.WorkspaceEdit,
-): Promise<void> {
-	await ensureTrashDirectories();
-
-	const { filesDir, infoDir } = getTrashPaths();
-	const fileName = path.basename(uri.fsPath);
-
-	// Get existing files in trash to handle name conflicts
-	const existingFiles = await vscode.workspace.fs.readDirectory(filesDir);
-	const existingNames = new Set(existingFiles.map(([name]) => name));
-
-	// Get unique name in trash
-	const trashName = getUniqueTrashName(fileName, existingNames);
-	const trashFileUri = vscode.Uri.joinPath(filesDir, trashName);
-	const trashInfoUri = vscode.Uri.joinPath(infoDir, `${trashName}.trashinfo`);
-
-	// Move file to trash using WorkspaceEdit (this makes it undoable!)
-	edit.renameFile(uri, trashFileUri, { overwrite: false });
-
-	// Create trash info metadata file as part of WorkspaceEdit
-	// This makes it undoable too - when you undo, both operations are reversed together!
-	const deletionDate = new Date();
-	const content = [
-		"[Trash Info]",
-		`Path=${uri.fsPath}`,
-		`DeletionDate=${deletionDate.toISOString().split(".")[0]}`,
-		"",
-	].join("\n");
-
-	const encoder = new TextEncoder();
-	edit.createFile(trashInfoUri, {
-		contents: encoder.encode(content),
-		overwrite: false,
-	});
-}
-
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-	console.log('Extension "remotetrash" is now active!');
-
 	const disposable = vscode.commands.registerCommand(
 		"remotetrash.delete",
-		async (uri: vscode.Uri, uris: vscode.Uri[]) => {
-			// Handle multiple selections
+		async (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
 			let filesToDelete: vscode.Uri[];
 
 			if (uris && uris.length > 0) {
-				// Context menu with multiple selections
 				filesToDelete = uris;
 			} else if (uri) {
-				// Context menu with single selection
 				filesToDelete = [uri];
 			} else {
 				// Keybinding - try to get selection from explorer using clipboard trick
+				// https://github.com/microsoft/vscode/issues/3553#issuecomment-1098562676
 				try {
+					const originalClipboardContent =
+						await vscode.env.clipboard.readText();
+
 					await vscode.commands.executeCommand("copyFilePath");
+
 					const clipboardContent = await vscode.env.clipboard.readText();
 
-					if (clipboardContent) {
-						// Parse the clipboard content (could be multiple paths separated by newlines)
-						const paths = clipboardContent.split("\n").filter((p) => p.trim());
-						filesToDelete = paths.map((p) => vscode.Uri.file(p.trim()));
-					} else {
-						vscode.window.showErrorMessage(
-							"No files selected for deletion. Please select a file in the explorer.",
-						);
+					await vscode.env.clipboard.writeText(originalClipboardContent);
+
+					filesToDelete = clipboardContent
+						.split("\n")
+						.map((path) => vscode.Uri.file(path));
+
+					if (filesToDelete.length === 0) {
 						return;
 					}
 				} catch {
-					vscode.window.showErrorMessage(
-						"No files selected for deletion. Please select a file in the explorer.",
-					);
 					return;
 				}
 			}
 
-			if (!filesToDelete || filesToDelete.length === 0) {
-				vscode.window.showErrorMessage("No files selected for deletion");
+			const trashCliPath = getTrashCliPath();
+
+			if (!(await checkTrashInstalled(trashCliPath))) {
 				return;
 			}
 
-			const trashInstalled = await checkTrashInstalled();
-
-			console.log(trashInstalled);
-
-			if (!trashInstalled) {
-				const response = await vscode.window.showWarningMessage(
-					"trash-cli is not installed. Would you like to install it now?",
-				);
-
-				return;
-			}
-
-			// Confirm deletion
-			const fileNames = filesToDelete
-				.map((f) => f.fsPath.split("/").pop())
-				.join(", ");
-			const message =
-				filesToDelete.length === 1
-					? `Are you sure you want to delete '${fileNames}'?`
-					: `Are you sure you want to delete ${filesToDelete.length} items?`;
-
-			const confirm = await vscode.window.showWarningMessage(
-				message,
-				{ modal: true },
-				"Move to Trash",
-			);
-
-			if (confirm !== "Move to Trash") {
-				return;
-			}
-
-			// Delete files using WorkspaceEdit (undoable!)
 			try {
-				const edit = new vscode.WorkspaceEdit();
+				// Loop through each file and try to close its tab, VS Code will ask confirmation
+				// for dirty ones. Closing a tab renders other tab reference stale, so we have
+				// to go through `vscode.window.tabGroups.all` for every tab
+				for (const fileUri of filesToDelete) {
+					let tabToClose: vscode.Tab | undefined;
 
-				await vscode.window.withProgress(
-					{
-						location: vscode.ProgressLocation.Notification,
-						title: "Moving to trash...",
-						cancellable: false,
-					},
-					async () => {
-						for (const file of filesToDelete) {
-							await deleteWithWorkspaceEdit(file, edit);
+					for (const tabGroup of vscode.window.tabGroups.all) {
+						for (const tab of tabGroup.tabs) {
+							const tabInput = tab.input;
+
+							if (
+								typeof tabInput === "object" &&
+								tabInput &&
+								"uri" in tabInput
+							) {
+								const tabUri = tabInput.uri as vscode.Uri;
+
+								if (tabUri.toString() === fileUri.toString()) {
+									tabToClose = tab;
+									break;
+								}
+							}
 						}
-					},
-				);
 
-				// Apply all the edits at once (makes it a single undoable operation)
-				const success = await vscode.workspace.applyEdit(edit);
+						if (tabToClose) {
+							break;
+						}
+					}
 
-				if (!success) {
-					throw new Error("Failed to apply workspace edit");
-				}
+					if (tabToClose) {
+						const wasClosed = await vscode.window.tabGroups.close(tabToClose);
 
-				// Close editors for deleted files (after the edit)
-				const tabsToClose: vscode.Tab[] = [];
-				for (const tabGroup of vscode.window.tabGroups.all) {
-					for (const tab of tabGroup.tabs) {
-						const tabUri = (tab.input as any)?.uri;
-						if (
-							tabUri &&
-							filesToDelete.some((f) => f.toString() === tabUri.toString())
-						) {
-							tabsToClose.push(tab);
+						// If user cancelled, remove file from deletion list
+						if (!wasClosed) {
+							filesToDelete = filesToDelete.filter(
+								(f) => f.toString() !== fileUri.toString(),
+							);
 						}
 					}
 				}
 
-				if (tabsToClose.length > 0) {
-					await vscode.window.tabGroups.close(tabsToClose);
+				if (filesToDelete.length === 0) {
+					return;
 				}
 
-				vscode.window.showInformationMessage(
-					`Successfully moved ${filesToDelete.length} item(s) to trash`,
+				for (const file of filesToDelete) {
+					await sendToTrash(file, trashCliPath);
+				}
+
+				await vscode.commands.executeCommand(
+					"workbench.files.action.refreshFilesExplorer",
 				);
 			} catch (error) {
 				vscode.window.showErrorMessage(

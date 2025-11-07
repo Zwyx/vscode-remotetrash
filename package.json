@@ -18,6 +18,16 @@
 	],
 	"main": "./dist/extension.js",
 	"contributes": {
+		"configuration": {
+			"title": "Remote Trash",
+			"properties": {
+				"remotetrash.trashCliPath": {
+					"type": "string",
+					"default": "trash",
+					"description": "Path or command for the trash CLI executable. Defaults to 'trash'."
+				}
+			}
+		},
 		"commands": [
 			{
 				"command": "remotetrash.delete",
