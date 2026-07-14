@@ -1,5 +1,5 @@
-# This workflow is triggered when a new version tag (`vX.Y.Z`) is push on branch `main`;
-# this relies on lightweight tags (see below, and see the `postversion` script in `package.json`).
+# This workflow is triggered when a new version tag (`vX.Y.Z`) is created on branch `main`.
+# This relies on lightweight tags (see below, and see the `postversion` script in `package.json`).
 
 name: Publish extension
 

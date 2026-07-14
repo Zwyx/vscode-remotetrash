@@ -76,7 +76,7 @@
 		"pretest": "npm run compile-tests && npm run compile && npm run lint",
 		"check-types": "tsc --noEmit",
 		"test": "vscode-test",
-		"lint": "eslint src --report-unused-disable-directives --max-warnings 0",
+		"lint": "eslint --max-warnings=0 src",
 		"prettier": "prettier -w .",
 		"postversion": "res/convert-annotated-tag-to-lightweight.sh",
 		"package": "vsce package",

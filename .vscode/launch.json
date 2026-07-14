@@ -11,7 +11,9 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}"
+				// To test the extension on your host machine, from the host machine, use:
 				// "--folder-uri=file://<path>"
+				// To test the extension inside a dev container, from the dev container, use:
 				// "--folder-uri=vscode-remote://attached-container+<container-hex><path>"
 			],
 			"outFiles": ["${workspaceFolder}/dist/**/*.js"],

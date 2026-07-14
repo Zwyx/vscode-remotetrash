@@ -2,4 +2,4 @@
 
 ## 1.0.0
 
-Initial release of Remove Trash.
+Initial release of Remote Trash.
